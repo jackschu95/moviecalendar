@@ -3,6 +3,7 @@ import cors from 'cors';
 import cron from 'node-cron';
 import { database } from './db';
 import { ScraperManager } from './scrapers';
+import { sampleMovies } from '../src/data/movies';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,10 +32,22 @@ async function updateMovieData() {
   try {
     console.log('Starting movie data update...');
     const movies = await scraperManager.scrapeAll();
-    await database.updateMovies(movies);
-    await database.clearOldMovies();
-    console.log(`Movie data updated successfully at ${new Date().toISOString()}`);
-    console.log(`Total movies in database: ${movies.length}`);
+
+    // If scraping failed (no movies), use sample data as fallback
+    if (movies.length === 0) {
+      console.log('Scraping returned no results, loading sample data...');
+      const sampleMoviesWithIds = sampleMovies.map(movie => ({
+        ...movie,
+        id: `${movie.theater}-${movie.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${movie.date.getTime()}`,
+      }));
+      await database.updateMovies(sampleMoviesWithIds);
+      console.log(`Loaded ${sampleMoviesWithIds.length} sample movies`);
+    } else {
+      await database.updateMovies(movies);
+      await database.clearOldMovies();
+      console.log(`Movie data updated successfully at ${new Date().toISOString()}`);
+      console.log(`Total movies in database: ${movies.length}`);
+    }
   } catch (error) {
     console.error('Error updating movie data:', error);
   }
